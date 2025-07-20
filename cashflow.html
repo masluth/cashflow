@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cashflow Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Poppins', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-6">
+
+<div class="max-w-4xl mx-auto bg-gray-800 p-6 rounded shadow-lg">
+  <h1 class="text-3xl font-bold mb-4 text-center">💰 Cashflow Planner</h1>
+
+  <div class="mb-6">
+    <label class="block mb-2 font-semibold">Pemasukan Bulanan (Rp):</label>
+    <input id="income" type="text" class="w-full p-2 rounded bg-gray-700 text-white"
+           oninput="formatCurrencyInput(this)" placeholder="Contoh: 3.000.000" />
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+    <div class="bg-gray-700 p-4 rounded"><p>Per Bulan</p><p class="text-xl font-bold" id="perMonth">Rp 0</p></div>
+    <div class="bg-gray-700 p-4 rounded"><p>Per 2 Minggu</p><p class="text-xl font-bold" id="per2Weeks">Rp 0</p></div>
+    <div class="bg-gray-700 p-4 rounded"><p>Per Hari</p><p class="text-xl font-bold" id="perDay">Rp 0</p></div>
+  </div>
+
+  <button onclick="calculateFlow()" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-semibold mb-6">🔍 Hitung Cashflow</button>
+
+  <h2 class="text-2xl font-semibold mb-3 mt-6">📆 Pengeluaran Mingguan</h2>
+  <div class="flex flex-col md:flex-row gap-3 mb-4">
+    <input id="weeklyName" type="text" placeholder="Nama pengeluaran" class="flex-1 p-2 rounded bg-gray-700 text-white">
+    <input id="weeklyAmount" type="text" placeholder="Jumlah (Rp)" oninput="formatCurrencyInput(this)" class="w-40 p-2 rounded bg-gray-700 text-white">
+    <button onclick="addWeekly()" class="bg-green-600 hover:bg-green-700 px-4 rounded">+ Tambah</button>
+  </div>
+  <ul id="weeklyList" class="space-y-2 mb-6"></ul>
+
+  <h2 class="text-2xl font-semibold mb-3 mt-6">📅 Pengeluaran Bulanan</h2>
+  <div class="flex flex-col md:flex-row gap-3 mb-4">
+    <input id="monthlyName" type="text" placeholder="Nama pengeluaran" class="flex-1 p-2 rounded bg-gray-700 text-white">
+    <input id="monthlyAmount" type="text" placeholder="Jumlah (Rp)" oninput="formatCurrencyInput(this)" class="w-40 p-2 rounded bg-gray-700 text-white">
+    <button onclick="addMonthly()" class="bg-green-600 hover:bg-green-700 px-4 rounded">+ Tambah</button>
+  </div>
+  <ul id="monthlyList" class="space-y-2 mb-6"></ul>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-gray-700 p-4 rounded">
+      <p>Total Pengeluaran</p>
+      <p class="text-xl font-bold" id="totalExpense">Rp 0</p>
+    </div>
+    <div class="bg-gray-700 p-4 rounded">
+      <p>Tabungan Otomatis (20%)</p>
+      <p class="text-xl font-bold" id="autoSaving">Rp 0</p>
+    </div>
+    <div class="bg-gray-700 p-4 rounded">
+      <p>Sisa Uang Bulanan</p>
+      <p class="text-xl font-bold" id="remaining">Rp 0</p>
+    </div>
+  </div>
+
+  <div class="bg-gray-700 p-4 rounded">
+    <canvas id="cashflowChart"></canvas>
+  </div>
+</div>
+
+<script>
+  let totalIncome = 0;
+  let weeklyExpenses = [];
+  let monthlyExpenses = [];
+  let chart;
+
+  function formatCurrencyInput(input) {
+    let value = input.value.replace(/[^\d]/g, '');
+    if (value) {
+      input.value = parseInt(value).toLocaleString('id-ID');
+    } else {
+      input.value = '';
+    }
+  }
+
+  function getNumericValue(str) {
+    return parseInt(str.replace(/\./g, '')) || 0;
+  }
+
+  function calculateFlow() {
+    totalIncome = getNumericValue(document.getElementById("income").value);
+    const autoSaving = Math.round(totalIncome * 0.2);
+    const per2Weeks = Math.round(totalIncome / 2);
+    const perDay = Math.round(totalIncome / 30);
+
+    document.getElementById("perMonth").textContent = formatRupiah(totalIncome);
+    document.getElementById("per2Weeks").textContent = formatRupiah(per2Weeks);
+    document.getElementById("perDay").textContent = formatRupiah(perDay);
+
+    updateSummary(autoSaving);
+    saveToLocal();
+  }
+
+  function addWeekly() {
+    const name = document.getElementById("weeklyName").value.trim();
+    const amount = getNumericValue(document.getElementById("weeklyAmount").value);
+    if (!name || !amount) return alert("Isi semua field mingguan!");
+
+    weeklyExpenses.push({ name, amount });
+    document.getElementById("weeklyName").value = "";
+    document.getElementById("weeklyAmount").value = "";
+    renderWeekly();
+    calculateFlow();
+    saveToLocal();
+  }
+
+  function addMonthly() {
+    const name = document.getElementById("monthlyName").value.trim();
+    const amount = getNumericValue(document.getElementById("monthlyAmount").value);
+    if (!name || !amount) return alert("Isi semua field bulanan!");
+
+    monthlyExpenses.push({ name, amount });
+    document.getElementById("monthlyName").value = "";
+    document.getElementById("monthlyAmount").value = "";
+    renderMonthly();
+    calculateFlow();
+    saveToLocal();
+  }
+
+  function renderWeekly() {
+    const list = document.getElementById("weeklyList");
+    list.innerHTML = "";
+    weeklyExpenses.forEach((e, i) => {
+      list.innerHTML += `
+        <li class="flex justify-between bg-gray-700 p-2 rounded">
+          <div>${e.name} - Rp ${e.amount.toLocaleString("id-ID")}</div>
+          <button onclick="deleteWeekly(${i})" class="text-red-400">Hapus</button>
+        </li>`;
+    });
+  }
+
+  function renderMonthly() {
+    const list = document.getElementById("monthlyList");
+    list.innerHTML = "";
+    monthlyExpenses.forEach((e, i) => {
+      list.innerHTML += `
+        <li class="flex justify-between bg-gray-700 p-2 rounded">
+          <div>${e.name} - Rp ${e.amount.toLocaleString("id-ID")}</div>
+          <button onclick="deleteMonthly(${i})" class="text-red-400">Hapus</button>
+        </li>`;
+    });
+  }
+
+  function deleteWeekly(index) {
+    weeklyExpenses.splice(index, 1);
+    renderWeekly();
+    calculateFlow();
+    saveToLocal();
+  }
+
+  function deleteMonthly(index) {
+    monthlyExpenses.splice(index, 1);
+    renderMonthly();
+    calculateFlow();
+    saveToLocal();
+  }
+
+  function updateSummary(autoSaving) {
+    const totalWeekly = weeklyExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalMonthly = monthlyExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalAll = totalWeekly + totalMonthly;
+    const remaining = totalIncome - totalAll - autoSaving;
+
+    document.getElementById("totalExpense").textContent = formatRupiah(totalAll);
+    document.getElementById("remaining").textContent = formatRupiah(remaining);
+    document.getElementById("autoSaving").textContent = formatRupiah(autoSaving);
+
+    updateChart(totalAll, autoSaving, remaining);
+  }
+
+  function updateChart(expenseTotal, saving, remain) {
+    const ctx = document.getElementById("cashflowChart").getContext("2d");
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: ["Pengeluaran", "Tabungan", "Sisa Uang"],
+        datasets: [{
+          backgroundColor: ["#ef4444", "#10b981", "#3b82f6"],
+          data: [expenseTotal, saving, remain]
+        }]
+      },
+      options: {
+        plugins: {
+          legend: { labels: { color: "#fff" } }
+        }
+      }
+    });
+  }
+
+  function saveToLocal() {
+    const data = {
+      income: totalIncome,
+      weekly: weeklyExpenses,
+      monthly: monthlyExpenses
+    };
+    localStorage.setItem("cashflow_data", JSON.stringify(data));
+  }
+
+  function loadFromLocal() {
+    const saved = localStorage.getItem("cashflow_data");
+    if (saved) {
+      const data = JSON.parse(saved);
+      totalIncome = data.income || 0;
+      weeklyExpenses = data.weekly || [];
+      monthlyExpenses = data.monthly || [];
+      document.getElementById("income").value = totalIncome.toLocaleString("id-ID");
+      renderWeekly();
+      renderMonthly();
+      calculateFlow();
+    }
+  }
+
+  function formatRupiah(value) {
+    return "Rp " + (value || 0).toLocaleString("id-ID");
+  }
+
+  window.addEventListener("DOMContentLoaded", loadFromLocal);
+</script>
+
+</body>
+</html>
